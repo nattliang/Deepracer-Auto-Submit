@@ -5,13 +5,14 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException
 
 def start_selenium(creds, url, model_name):
     good = True
     GLOBAL_WAIT_TIME: int = 30
     SUBMISSION_WAIT_TIME: int = 600
 
-    # Start selenium webdriver
+    # Start Selenium webdriver
     driver = webdriver.Chrome(ChromeDriverManager().install())
     wait = WebDriverWait(driver, GLOBAL_WAIT_TIME)
     pending = WebDriverWait(driver, SUBMISSION_WAIT_TIME)
@@ -38,33 +39,55 @@ def start_selenium(creds, url, model_name):
     # Go to race url
     if good:
         try:
-            time.sleep(2)
+            time.sleep(5)
             driver.get(url)
             time.sleep(5)
             race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
         except:
-            print('ERROR: Failed finding "Race again" button. Check the url')
+            print('ERROR: Failed finding "Race again" button. Check the url.')
             good = False
 
+    retry_count = 0
     while good:
-        try:
-            race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
-            race.click()
-        except:
-            print('ERROR: Submission Timeout Reached')
+        while True:
+            # Wait for previous submission to finish
+            try:
+                race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
+                race.click()
+            except:
+                print('ERROR: Submission Timeout Reached')
+                break
+            
+            # Choose model and submit it
+            try:
+                dropdown = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='awsui-dropdown-trigger awsui-select-trigger awsui-select-trigger-no-option awsui-select-trigger-variant-label']")))
+                dropdown.click()
+                choose_model = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@title='%s']" %model_name)))
+                choose_model.click()
+            except:
+                print('ERROR: Failed to select model. Check the model name.')
+                good = False
+                break
+
+            # Click the submit buttom
+            try:
+                enter_race = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-variant-primary awsui-hover-child-icons']")))
+                enter_race.click()
+            except:
+                print('ERROR: Model Submission Failed')
+                break
+
+        # Retry if failed
+        retry_count += 1
+        if retry_count == 5: # Break if failed too many times
+            print('Failed 5 times. Stopping.')
+            driver.quit()
             break
-        
-        # Choose model and submit it
-        try:
-            dropdown = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='awsui-dropdown-trigger awsui-select-trigger awsui-select-trigger-no-option awsui-select-trigger-variant-label']")))
-            dropdown.click()
-            choose_model = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@title='%s']" %model_name)))
-            choose_model.click()
-            enter_race = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-variant-primary awsui-hover-child-icons']")))
-            enter_race.click()
-        except:
-            print('ERROR: Model Submission Failed')
-            break
+        if good:
+            print('Failed %s time(s). Retrying..' %retry_count)
+            driver.get(url)
+            time.sleep(5)
+
 
 ##### FIELDS TO FILL OUT #####
 account_id = '' # Your IAM role account ID (12 digit number)
