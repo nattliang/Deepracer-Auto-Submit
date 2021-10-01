@@ -5,22 +5,23 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import NoSuchElementException
 
 def start_selenium(creds, url, model_name):
     good = True
-    GLOBAL_WAIT_TIME: int = 30
+    retry_count = 0
+    error = "\033[91mERROR: \033[0m"
+    GLOBAL_WAIT_TIME: int = 15
     SUBMISSION_WAIT_TIME: int = 600
 
     # Start Selenium webdriver
     driver = webdriver.Chrome(ChromeDriverManager().install())
     wait = WebDriverWait(driver, GLOBAL_WAIT_TIME)
     pending = WebDriverWait(driver, SUBMISSION_WAIT_TIME)
-    driver.get('https://%s.signin.aws.amazon.com/console' %creds[0])
     driver.maximize_window()
 
-    # Log in as IAM user
-    try:
+    def login(creds):
+        print(time.ctime() + ' | Logging in..')
+        driver.get('https://%s.signin.aws.amazon.com/console' %creds[0])
         time.sleep(2)
         elem_username = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@id='username']")))
         elem_username.clear()
@@ -32,8 +33,12 @@ def start_selenium(creds, url, model_name):
 
         elem_submit = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='input_signin_button']/a")))
         elem_submit.click() 
+
+    # Log in as IAM user
+    try:
+        login(creds)
     except:
-        print('ERROR: Login Failed')
+        print(error + 'Login Failed. Check credentials.')
         good = False
 
     # Go to race url
@@ -44,10 +49,9 @@ def start_selenium(creds, url, model_name):
             time.sleep(5)
             race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
         except:
-            print('ERROR: Failed finding "Race again" button. Check the url.')
+            print(error + 'Failed finding "Race again" button. Check the url.')
             good = False
 
-    retry_count = 0
     while good:
         while True:
             # Wait for previous submission to finish
@@ -55,7 +59,7 @@ def start_selenium(creds, url, model_name):
                 race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
                 race.click()
             except:
-                print('ERROR: Submission Timeout Reached')
+                print(error + 'Submission Timeout Reached')
                 break
             
             # Choose model and submit it
@@ -65,35 +69,61 @@ def start_selenium(creds, url, model_name):
                 choose_model = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@title='%s']" %model_name)))
                 choose_model.click()
             except:
-                print('ERROR: Failed to select model. Check the model name.')
-                good = False
+                print(error + 'Failed to select model with name "%s"' %model_name)
                 break
 
             # Click the submit buttom
             try:
                 enter_race = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-variant-primary awsui-hover-child-icons']")))
                 enter_race.click()
-            except:
-                print('ERROR: Model Submission Failed')
-                break
 
+                # Check to see if model submitted successfully
+                time.sleep(2)
+                check_eval = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-disabled awsui-button-variant-normal awsui-hover-child-icons']")))
+                check_eval = check_eval.text
+                if check_eval != 'Under evaluation':
+                    print(error + 'Model Submission Failed')
+                    break
+            except:
+                print(error + 'Model Submission Failed')
+                break
+            
         # Retry if failed
         retry_count += 1
-        if retry_count == 5: # Break if failed too many times
-            print('Failed 5 times. Stopping.')
+
+        # Break if failed too many attempts
+        if retry_count == 100:
+            print(time.ctime() + ' | Failed %s time(s). Stopping.' %retry_count)
             driver.quit()
             break
-        if good:
-            print('Failed %s time(s). Retrying..' %retry_count)
+
+        try:
             driver.get(url)
-            time.sleep(5)
+        except:
+            driver.quit()
+            break
+
+        # Log back in if logged out
+        try:
+            wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='input_signin_button']/a")))
+            print(time.ctime() + ' | Logged out. Attempting to login again..')
+
+            try:
+                login(creds)
+            except:
+                print(time.ctime() + ' | ERROR: Login Failed')
+                driver.quit()
+                break
+
+        except:
+            print(time.ctime() + ' | Failed %s time(s). Retrying..' %retry_count)
 
 
 ##### FIELDS TO FILL OUT #####
 account_id = '' # Your IAM role account ID (12 digit number)
 username = '' # Your IAM role username
 password = '' # Your IAM role password
-race_url = 'https://console.aws.amazon.com/deepracer/home?region=us-east-1#league/arn%3Aaws%3Adeepracer%3A%3A%3Aleaderboard%2F9f2d829b-888d-4fc1-ba83-215ce4c01851' # The url of the race (default is September Pro Qualifier)
+race_url = 'https://console.aws.amazon.com/deepracer/home?region=us-east-1#league/arn%3Aaws%3Adeepracer%3A%3A%3Aleaderboard%2F3f4f0e17-37eb-4363-bb9a-3bf1eafdc96b' # The url of the race (default is October Pro Qualifier)
 model_to_submit = '' # Name of the model you want to submit
 ##############################
 
