@@ -48,7 +48,7 @@ def start_selenium(creds, url, model_name):
             time.sleep(5)
             driver.get(url)
             time.sleep(5)
-            race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
+            race = pending.until(EC.presence_of_element_located((By.XPATH, "//button[@data-analytics='league_leaderboard_race_again']")))
         except Exception:
             print(error + 'Failed finding "Race again" button. Check the url.')
             good = False
@@ -57,15 +57,16 @@ def start_selenium(creds, url, model_name):
         while True:
             # Wait for previous submission to finish
             try:
-                race = pending.until(EC.presence_of_element_located((By.XPATH, "//awsui-button[@data-analytics='league_leaderboard_race_again']")))
-                race.click()
+                race_again = pending.until(EC.presence_of_element_located((By.XPATH, "//button[@data-analytics='league_leaderboard_race_again']")))
+                driver.execute_script("arguments[0].scrollIntoView(false);", race_again)
+                race_again.click()
             except TimeoutException:
                 print(error + 'Submission Timeout Reached')
                 break
             
             # Choose model and submit it
             try:
-                dropdown = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='awsui-dropdown-trigger awsui-select-trigger awsui-select-trigger-no-option awsui-select-trigger-variant-label']")))
+                dropdown = wait.until(EC.presence_of_element_located((By.XPATH,"//span[contains(text(), 'Choose a model')]")))
                 dropdown.click()
                 choose_model = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@title='%s']" %model_name)))
                 choose_model.click()
@@ -75,12 +76,12 @@ def start_selenium(creds, url, model_name):
 
             # Click the submit buttom
             try:
-                enter_race = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-variant-primary awsui-hover-child-icons']")))
+                enter_race = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@data-analytics='submit_to_leaderboard_accept']")))
                 enter_race.click()
 
                 # Check to see if model submitted successfully
                 time.sleep(2)
-                check_eval = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@class='awsui-button awsui-button-disabled awsui-button-variant-normal awsui-hover-child-icons']")))
+                check_eval = wait.until(EC.presence_of_element_located((By.XPATH,"//span[contains(text(), 'Under evaluation')]")))
                 check_eval = check_eval.text
                 if check_eval != 'Under evaluation':
                     print(error + 'Model Submission Failed')
@@ -93,7 +94,7 @@ def start_selenium(creds, url, model_name):
         retry_count += 1
 
         # Break if failed too many attempts
-        if retry_count == 10:
+        if retry_count == 20:
             print(time.ctime() + ' | Failed %s time(s). Stopping.' %retry_count)
             driver.quit()
             break
